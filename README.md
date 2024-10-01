@@ -10,7 +10,7 @@ If no name is provided will create `pbd`.
 ## `pbd`
 
 `pbd` outputs 8 `out%d.csv` of 10 seconds of simulation, where
-`%d` is number 0 through 7.
+`%d` is integers 0 through 7.
 
 ## `vid`
 `vid` turns a `csv` from `pbd` into `mp4`. 
