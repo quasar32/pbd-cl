@@ -9,8 +9,8 @@ If no name is provided will create `pbd`.
 
 ## `pbd`
 
-`pbd` outputs a `csv` of 10 seconds of simulation.
-If a filename is not provided `pbd` outputs to standard output. 
+`pbd` outputs 8 `out%d.csv` of 10 seconds of simulation, where
+`%d` is number 0 through 7.
 
 ## `vid`
 `vid` turns a `csv` from `pbd` into `mp4`. 
