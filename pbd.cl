@@ -3,7 +3,8 @@
 #define N_STEPS 100
 #define SDT (DT / N_STEPS)
 #define STS (N_STEPS * FPS)
-#define N_BEADS 5
+#define N_BEADS 8 
+#define N_GROUPS 8 
 
 typedef struct bead {
     float radius;
@@ -63,17 +64,18 @@ void keep_on_wire(__global bead *bd, __global wire *wr) {
 }
 
 __kernel void frame(__global bead *bds, __global wire *wr) {
+    __global bead *bd2 = bds + get_global_id(0) * N_BEADS;
     for (int s = 0; s < N_STEPS; s++) {
         int i, j;
         for (i = 0; i < N_BEADS; i++)
-            start_step(bds + i);
+            start_step(bd2 + i);
         for (i = 0; i < N_BEADS; i++)
-            keep_on_wire(bds + i, wr);
+            keep_on_wire(bd2 + i, wr);
         for (i = 0; i < N_BEADS; i++)
-            end_step(bds + i);
+            end_step(bd2 + i);
         for (i = 0; i < N_BEADS; i++) {
             for (j = 0; j < i; j++)
-                bead_col(bds + i, bds + j);
+                bead_col(bd2 + i, bd2 + j);
         }
     }
 }

@@ -2,18 +2,19 @@
 #include <stdlib.h>
 #include <math.h>
 #include <stdint.h>
-#include <time.h>
 #include <CL/cl.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <time.h>
 
 #define FPS 60
 #define DT (1.0f / FPS)
 #define N_STEPS 100
 #define SDT (DT / N_STEPS)
-#define N_BEADS 5
+#define N_BEADS 8 
+#define N_GROUPS 8 
 
 typedef struct __attribute__((aligned(8))) float2 {
   float x;
@@ -35,15 +36,21 @@ typedef struct wire {
   float radius;
 } wire;
 
-static bead bds[N_BEADS]; 
+static bead bds[N_BEADS * N_GROUPS]; 
 static wire wr = {{0.0f, 0.0f}, 0.8f};
+static FILE *fps[N_GROUPS];
 
 static void print_sim(int f) {
-  for (int i = 0; i < N_BEADS; i++) {
-    bead *bd = bds + i;
-    printf("%d,%d,%f,%f,%f\n", f, 0, bd->pos.x, bd->pos.y, bd->radius); 
+  bead *bd = bds;
+  for (int i = 0; i < N_GROUPS; i++) {
+    for (int j = 0; i < N_BEADS; i++) {
+      fprintf(fps[i], "%d,%d,%f,%f,%f\n", f, 0, 
+          bd->pos.x, bd->pos.y, bd->radius); 
+      bd++;
+    }
+    fprintf(fps[i], "%d,%d,%f,%f,%f\n", f, 1, 
+        wr.pos.x, wr.pos.y, wr.radius); 
   }
-  printf("%d,%d,%f,%f,%f\n", f, 1, wr.pos.x, wr.pos.y, wr.radius); 
 }
 
 static void die(const char *fn, int err) {
@@ -133,7 +140,8 @@ static void create_cl(void) {
 
 static void frame(void) {
   cl_event ev;
-  cl_int err = clEnqueueTask(cq, kernel, 0, NULL, &ev);
+  cl_int err = clEnqueueNDRangeKernel(cq, kernel, 1, NULL,
+      (size_t[]) {8}, (size_t[]) {8} , 0, NULL, &ev);
   if (err != CL_SUCCESS)
     die("clEnqueueTask", err);
   clWaitForEvents(1, &ev);
@@ -147,43 +155,36 @@ static void frame(void) {
 
 int main(int argc, char **argv) {
   srand48(time(NULL));
-  switch (argc) {
-  case 0:
-  case 1:
-    break;
-  case 2:
-    FILE *tmp;
-    tmp = freopen(argv[1], "wb", stdout);
-    if (!tmp) {
-      perror("freopen");
-      exit(1);
-    }
-    stdout = tmp;
-    break;
-  default:
-    fputs("too many args\n", stderr);
-    exit(1);
+  for (int i = 0; i < N_GROUPS; i++) {
+    char buf[64]; 
+    sprintf(buf, "out%d.csv", i); 
+    fps[i] = fopen(buf, "wb");
+    if (!fps[i])
+      die("errno", errno);
   }
-  float r = 0.1f;
-  float rot = 0.0f;
-  for (int i = 0; i < N_BEADS; i++) {
-    bead *bd = bds + i;
-    bd->radius = r;
-    bd->mass = (float) M_PI * r * r; 
-    bd->pos.x = wr.pos.x + wr.radius * cosf(rot);
-    bd->pos.y = wr.pos.y + wr.radius * sinf(rot);
-    rot += (float) M_PI / N_BEADS;
-    r = 0.05f + drand48() * 0.1f;
+  bead *bd = bds;
+  for (int i = 0; i < N_GROUPS; i++) { 
+    float r = 0.1f;
+    float rot = 0.0f;
+    for (int j = 0; j < N_BEADS; j++) {
+      bd->radius = r;
+      bd->mass = (float) M_PI * r * r; 
+      bd->pos.x = wr.pos.x + wr.radius * cosf(rot);
+      bd->pos.y = wr.pos.y + wr.radius * sinf(rot);
+      rot += (float) M_PI / N_BEADS;
+      r = 0.05f + drand48() * 0.1f;
+      bd++;
+    }
   }
   create_cl();
-  clock_t t0 = clock();
-  printf("f,t,x,y,r\n");
+  for (int i = 0; i < N_GROUPS; i++) 
+    fprintf(fps[i], "f,t,x,y,r\n");
   int f;
   for (f = 0; f < 10 * FPS; f++) {
     print_sim(f);
     frame();
   }
   print_sim(f);
-  clock_t t1 = clock();
-  printf("%d\n", (t1 - t0) * 1000 / CLOCKS_PER_SEC);
+  for (int i = 0; i < N_GROUPS; i++) 
+    fclose(fps[i]);
 }
