@@ -1,10 +1,10 @@
 #define FPS 60
+#define N_BEADS 8 
+
 #define DT (1.0f / FPS)
 #define N_STEPS 100
 #define SDT (DT / N_STEPS)
 #define STS (N_STEPS * FPS)
-#define N_BEADS 8 
-#define N_GROUPS 8 
 
 typedef struct bead {
     float radius;
@@ -14,25 +14,25 @@ typedef struct bead {
     float2 vel;
 } bead;
 
-typedef struct wire {
+typedef struct wire{
     float2 pos;
     float radius;
 } wire;
 
 __constant float2 gravity = {0.0F, -10.0F};
 
-void start_step(__global bead *bd) {
-    bd->vel += gravity * SDT; 
-    bd->prev_pos = bd->pos;
-    bd->pos += bd->vel * SDT; 
+void start_step(__local bead *a) {
+    a->vel += gravity * SDT; 
+    a->prev_pos = a->pos;
+    a->pos += a->vel * SDT; 
 }
 
-void end_step(__global bead *bd) {
-    bd->vel = bd->pos - bd->prev_pos;
-    bd->vel = bd->vel * STS;
+void end_step(__local bead *a) {
+    a->vel = a->pos - a->prev_pos;
+    a->vel = a->vel * STS;
 }
 
-void bead_col(__global bead *a, __global bead *b) {
+void bead_col(__local bead *a, __local bead *b) {
     float2 dir = b->pos - a->pos;
     float d = length(dir);
     if (d == 0.0f || d > a->radius + b->radius)
@@ -53,29 +53,41 @@ void bead_col(__global bead *a, __global bead *b) {
     b->vel = b->vel + dir * (v1b - v0b); 
 }
 
-void keep_on_wire(__global bead *bd, __global wire *wr) {
-    float2 dir = bd->pos - wr->pos;
+void keep_on_wire(__local bead *a, __local wire *b) {
+    float2 dir = a->pos - b->pos;
     float len = length(dir); 
     if (len == 0.0f)
         return;
     dir = dir / len;
-    float lambda = wr->radius - len;
-    bd->pos = bd->pos + dir * lambda;
+    float lambda = b->radius - len;
+    a->pos = a->pos + dir * lambda;
 }
 
-__kernel void frame(__global bead *bds, __global wire *wr) {
-    __global bead *bd2 = bds + get_global_id(0) * N_BEADS;
+__kernel void update_sim(
+    __global bead(*groups)[N_BEADS], 
+    __global wire *gwire
+) {
+    __global bead *group;
+    __local bead beads[N_BEADS];
+    __local wire lwire;
+    
+    group = groups[get_global_id(0)];
+    for (int i = 0; i < N_BEADS; i++) 
+        beads[i] = group[i];
+    lwire = *gwire;
     for (int s = 0; s < N_STEPS; s++) {
         int i, j;
         for (i = 0; i < N_BEADS; i++)
-            start_step(bd2 + i);
+            start_step(beads + i);
         for (i = 0; i < N_BEADS; i++)
-            keep_on_wire(bd2 + i, wr);
+            keep_on_wire(beads + i, &lwire);
         for (i = 0; i < N_BEADS; i++)
-            end_step(bd2 + i);
+            end_step(beads + i);
         for (i = 0; i < N_BEADS; i++) {
             for (j = 0; j < i; j++)
-                bead_col(bd2 + i, bd2 + j);
+                bead_col(beads + i, beads + j);
         }
     }
+    for (int i = 0; i < N_BEADS; i++) 
+        group[i] = beads[i];
 }
