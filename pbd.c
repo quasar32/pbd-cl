@@ -60,7 +60,7 @@ static void parse_args(int argc, char **argv) {
         fprintf(stderr, "group number is invalid\n");
         exit(1);
       }
-      if (n_groups > 1024) {
+      if (n_groups > 65536) {
         fprintf(stderr, "too many groups\n");
         exit(1);
       }
@@ -195,8 +195,7 @@ static void update_sim(void) {
 
 static FILE *open_csv(int i) {
   char buf[64]; 
-  sprintf(buf, "out%03d.csv", i); 
-  sprintf(buf, "out%06d.csv", i); 
+  sprintf(buf, "out%05d.csv", i); 
   FILE *csv = fopen(buf, "wb");
   if (!csv)
     die("fopen", errno);
