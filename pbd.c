@@ -195,7 +195,7 @@ static void update_sim(void) {
 
 static FILE *open_csv(int i) {
   char buf[64]; 
-  sprintf(buf, "out%05d.csv", i); 
+  sprintf(buf, "out%06d.csv", i); 
   FILE *csv = fopen(buf, "wb");
   if (!csv)
     die("fopen", errno);
