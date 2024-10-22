@@ -3,6 +3,9 @@
 pbd: pbd.o
 	gcc $^ -o $@ -lm -lOpenCL -fsanitize=undefined
 
+profile: profile.c
+	gcc $< -o $@ -D _GNU_SOURCE
+
 pbd.o: pbd.c
 	gcc $< -o $@ -c -D CL_TARGET_OPENCL_VERSION=120 -fsanitize=undefined
 
@@ -17,4 +20,4 @@ glad/src/gl.o: glad/src/gl.c
 	gcc $< -o $@ -c -Iglad/include 
 
 clean:
-	rm glad/src/gl.o *.o pbd vid *.mp4 *.csv -f
+	rm glad/src/gl.o *.o pbd vid *.mp4 *.csv -f profile
