@@ -18,21 +18,22 @@ typedef struct __attribute__((aligned(8))) float2 {
   float y;
 } float2;
 
-typedef struct bead {
-  float radius;
-  float mass;
-  float2 pos;
-  float2 prev_pos;
-  float2 vel;
-} bead;
-
-typedef struct wire {
+struct wire {
   float2 pos;
   float radius;
-} wire;
+};
 
-static bead(*groups)[N_BEADS]; 
-static wire wr = {{0.0f, 0.0f}, 0.8f};
+struct group {
+  struct wire wire;
+  float beads_radius[N_BEADS];
+  float beads_mass[N_BEADS];
+  float2 beads_pos[N_BEADS];
+  float2 beads_prev_pos[N_BEADS];
+  float2 beads_vel[N_BEADS];
+};
+
+static struct group *groups;
+
 static cl_ulong elapsed;
 static cl_kernel kernel;
 static cl_command_queue cmdq;
@@ -111,10 +112,6 @@ static void init_cl(void) {
       n_groups * sizeof(*groups), groups, &err);
   if (err != CL_SUCCESS)
     die("clCreateBuffer", err);
-  cl_mem wr_mem = clCreateBuffer(ctx, CL_MEM_READ_ONLY | 
-      CL_MEM_COPY_HOST_PTR | CL_MEM_HOST_NO_ACCESS, sizeof(wr), &wr, &err);
-  if (err != CL_SUCCESS)
-    die("clCreateBuffer", err);
   const char *str = read_all("pbd.cl");
   cl_program prog = clCreateProgramWithSource(ctx, 1, &str, NULL, &err);
   free((void *) str);
@@ -139,26 +136,24 @@ static void init_cl(void) {
   err = clSetKernelArg(kernel, 0, sizeof(cl_mem), &groups_mem);
   if (err != CL_SUCCESS)
     die("clSetKernelArg", err);
-  err = clSetKernelArg(kernel, 1, sizeof(cl_mem), &wr_mem);
-  if (err != CL_SUCCESS)
-    die("clSetKernelArg", err);
   cmdq = clCreateCommandQueue(ctx, did, CL_QUEUE_PROFILING_ENABLE, &err);
   if (err != CL_SUCCESS)
     die("clCreateCommandQueue", err);
 }
 
 
-static void init_beads(void) {
+static void init_groups(void) {
   groups = xmalloc(n_groups * sizeof(*groups));
   for (int i = 0; i < n_groups; i++) { 
+    struct group *g = &groups[i];
+    g->wire = (struct wire) {{0.0f, 0.0f}, 0.8f};
     float r = 0.1f;
     float rot = 0.0f;
     for (int j = 0; j < N_BEADS; j++) {
-      bead *bd = &groups[i][j];
-      bd->radius = r;
-      bd->mass = (float) M_PI * r * r; 
-      bd->pos.x = wr.pos.x + wr.radius * cosf(rot);
-      bd->pos.y = wr.pos.y + wr.radius * sinf(rot);
+      g->beads_radius[j] = r;
+      g->beads_mass[j] = (float) M_PI * r * r; 
+      g->beads_pos[j].x = g->wire.pos.x + g->wire.radius * cosf(rot);
+      g->beads_pos[j].y = g->wire.pos.y + g->wire.radius * sinf(rot);
       rot += (float) M_PI / N_BEADS;
       r = 0.05f + drand48() * 0.1f;
     }
@@ -211,18 +206,18 @@ static void print_header(FILE *csv) {
     fprintf(csv, "f,t,x,y,r\n");
 }
 
-static void print_sim_one(FILE *csv, bead *groups, int frame) {
+static void print_sim_one(FILE *csv, struct group *g, int frame) {
   for (int i = 0; i < N_BEADS; i++) {
     fprintf(csv, "%d,%d,%f,%f,%f\n", frame, 0, 
-        groups[i].pos.x, groups[i].pos.y, groups[i].radius); 
+        g->beads_pos[i].x, g->beads_pos[i].y, g->beads_radius[i]);
   }
   fprintf(csv, "%d,%d,%f,%f,%f\n", frame, 1, 
-      wr.pos.x, wr.pos.y, wr.radius); 
+      g->wire.pos.x, g->wire.pos.y, g->wire.radius);
 }
 
 static void print_sim_all(int frame) {
   for (int i = 0; i < n_groups; i++) 
-    print_sim_one(csvs[i], groups[i], frame);
+    print_sim_one(csvs[i], &groups[i], frame);
 }
 
 static void print_time(const char *msg, cl_ulong ul) {
@@ -231,18 +226,18 @@ static void print_time(const char *msg, cl_ulong ul) {
   for (; ul / n; n *= 1000);
   if (ul != 0) 
     n /= 1000;
-  printf("%llu", ul / n % 1000);
+  printf("%lu", ul / n % 1000);
   while (n /= 1000, n) 
-    printf(",%03llu", ul / n % 1000);
+    printf(",%03lu", ul / n % 1000);
   printf(" ns\n");
 }
 
 int main(int argc, char **argv) {
   parse_args(argc, argv);
-  init_beads();
+  init_groups();
   init_cl();
   if (ends_only) {
-    bead(*init)[N_BEADS] = xmalloc(n_groups * sizeof(*groups));
+    struct group *init = xmalloc(n_groups * sizeof(*groups));
     memcpy(init, groups, n_groups * sizeof(*groups));
     int f;
     for (f = 0; f < 10 * FPS; f++) 
@@ -250,8 +245,8 @@ int main(int argc, char **argv) {
     for (int i = 0; i < n_groups; i++) {
       FILE *csv = open_csv(i);
       print_header(csv);
-      print_sim_one(csv, init[i], 0);
-      print_sim_one(csv, groups[i], 1);
+      print_sim_one(csv, &init[i], 0);
+      print_sim_one(csv, &groups[i], 1);
       fclose(csv);
     }
     free(init);
