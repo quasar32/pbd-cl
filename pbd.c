@@ -60,10 +60,6 @@ static void parse_args(int argc, char **argv) {
         fprintf(stderr, "group number is invalid\n");
         exit(1);
       }
-      if (n_groups > 65536) {
-        fprintf(stderr, "too many groups\n");
-        exit(1);
-      }
       break;
     case '?': 
       exit(1);
